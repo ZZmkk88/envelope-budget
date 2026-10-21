@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>envelope-budget · 信封账本</title>
+<style>
+  :root{
+    --paper:#faf5ec; --card:#fffdf8; --ink:#33302a; --muted:#8a8175;
+    --line:#e6dcc9; --accent:#c05f1e; --accent-soft:#f6e3cf;
+    --good:#3e7d4e; --bad:#b3372c; --bar-bg:#efe6d4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+       background:var(--paper);color:var(--ink)}
+  header{background:var(--card);border-bottom:2px dashed var(--line);
+         padding:14px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:20px;margin:0;letter-spacing:.5px}
+  header h1 .env{color:var(--accent)}
+  header .spacer{flex:1}
+  button{background:var(--accent);color:#fff;border:0;border-radius:6px;
+         padding:7px 14px;cursor:pointer;font-size:14px}
+  button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  button.small{padding:3px 9px;font-size:12px}
+  button.danger{background:var(--bad)}
+  input,select{padding:7px 9px;border:1px solid var(--line);border-radius:6px;
+               background:#fff;font-size:14px;color:var(--ink)}
+  input[type=month]{padding:6px 9px}
+  main{max-width:1080px;margin:0 auto;padding:20px 16px 60px}
+  section{margin-bottom:28px}
+  h2{font-size:16px;margin:0 0 12px 0;color:var(--ink)}
+  h2::before{content:"✉ ";color:var(--accent)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+  .envelope{background:var(--card);border:1px solid var(--line);border-radius:10px;
+            padding:14px 16px;position:relative;overflow:hidden}
+  .envelope::before{content:"";position:absolute;top:0;left:0;right:0;height:6px;
+            background:repeating-linear-gradient(45deg,var(--accent-soft) 0 10px,#fff 10px 20px)}
+  .envelope h3{margin:4px 0 8px 0;font-size:15px}
+  .envelope .row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin:3px 0}
+  .envelope .balance{font-size:20px;font-weight:700;color:var(--ink);margin:6px 0 2px}
+  .envelope .balance.neg{color:var(--bad)}
+  .bar{height:8px;background:var(--bar-bg);border-radius:4px;overflow:hidden;margin-top:8px}
+  .bar>i{display:block;height:100%;background:var(--good)}
+  .bar>i.over{background:var(--bad)}
+  .envelope .alloc{display:flex;gap:6px;margin-top:10px}
+  .envelope .alloc input{width:100%;min-width:0}
+  .strip{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;
+        padding:10px 16px;min-width:150px}
+  .stat .k{font-size:12px;color:var(--muted)}
+  .stat .v{font-size:19px;font-weight:700;margin-top:2px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .formrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .formrow>*{margin:2px 0}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .amt-in{color:var(--good)} .amt-out{color:var(--bad)}
+  .rank{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:14px}
+  .rank .nm{width:90px} .rank .track{flex:1;height:10px;background:var(--bar-bg);border-radius:5px;overflow:hidden}
+  .rank .track>i{display:block;height:100%;background:var(--accent)}
+  .rank .vl{width:110px;text-align:right;font-variant-numeric:tabular-nums}
+  .hidden{display:none!important}
+  #login-wrap{max-width:360px;margin:12vh auto;background:var(--card);
+        border:1px solid var(--line);border-radius:12px;padding:28px}
+  #login-wrap h1{text-align:center;font-size:22px}
+  #login-wrap input{width:100%;margin:6px 0}
+  #login-wrap button{width:100%;margin-top:10px;padding:10px}
+  .msg{color:var(--bad);font-size:13px;min-height:18px}
+  .note{color:var(--muted);font-size:12px}
+  dialog{border:1px solid var(--line);border-radius:10px;padding:22px;max-width:340px;width:90%}
+  dialog input{width:100%;margin:6px 0}
+</style>
+</head>
+<body>
+
+<div id="login-wrap" class="hidden">
+  <h1><span style="color:var(--accent)">✉</span> 信封账本</h1>
+  <p class="note" style="text-align:center">envelope-budget · 每月先分信封，再花钱</p>
+  <input id="login-user" placeholder="用户名" autocomplete="username">
+  <input id="login-pass" type="password" placeholder="密码" autocomplete="current-password">
+  <div class="msg" id="login-msg"></div>
+  <button id="login-btn">登录</button>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1><span class="env">✉</span> 信封账本</h1>
+    <label class="note">月份 <input type="month" id="month-picker"></label>
+    <div class="spacer"></div>
+    <span class="note" id="who"></span>
+    <button class="ghost small" id="pw-btn">改密码</button>
+    <button class="ghost small" id="logout-btn">退出</button>
+  </header>
+
+  <main>
+    <section>
+      <h2>本月总览</h2>
+      <div class="strip">
+        <div class="stat"><div class="k">本月收入</div><div class="v amt-in" id="st-income">–</div></div>
+        <div class="stat"><div class="k">本月支出</div><div class="v amt-out" id="st-expense">–</div></div>
+        <div class="stat"><div class="k">还没分进信封的钱（待分配）</div><div class="v" id="st-tobudget">–</div></div>
+        <div class="stat"><div class="k">全部账户余额</div><div class="v" id="st-balance">–</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>信封（支出类别预算）</h2>
+      <div class="cards" id="envelopes"></div>
+      <p class="note">没花完的钱会自动结转到下个月同一个信封；超支的负数也会带过去。给信封改分配额后点「保存」。</p>
+      <div class="formrow">
+        <input id="new-exp-cat" placeholder="新增支出类别，如：宠物">
+        <button class="small" id="add-exp-cat">加类别</button>
+        <input id="new-inc-cat" placeholder="新增收入类别，如：奖金">
+        <button class="small" id="add-inc-cat">加类别</button>
+      </div>
+      <div class="msg" id="cat-msg"></div>
+    </section>
+
+    <section>
+      <h2>记一笔</h2>
+      <div class="panel">
+        <div class="formrow">
+          <input type="date" id="tx-date">
+          <select id="tx-kind">
+            <option value="expense">支出</option>
+            <option value="income">收入</option>
+          </select>
+          <select id="tx-account"></select>
+          <select id="tx-category"></select>
+          <input id="tx-amount" placeholder="金额（元，如 12.34）" style="width:150px">
+          <input id="tx-note" placeholder="备注（可空）" style="width:170px">
+          <button id="tx-add">记上</button>
+          <button class="ghost hidden" id="tx-cancel-edit">取消编辑</button>
+        </div>
+        <div class="msg" id="tx-msg"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>账户</h2>
+      <div class="panel">
+        <div id="accounts"></div>
+        <div class="formrow" style="margin-top:10px">
+          <input id="acc-name" placeholder="账户名，如：工资卡">
+          <input id="acc-opening" placeholder="期初余额（元）" style="width:140px">
+          <button class="small" id="acc-add">加账户</button>
+        </div>
+        <div class="msg" id="acc-msg"></div>
+        <p class="note">删账户会连同它的记账记录一起删除，请谨慎。</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>本月流水</h2>
+      <div class="panel">
+        <table>
+          <thead><tr>
+            <th>日期</th><th>类别</th><th>账户</th><th>备注</th>
+            <th class="num">金额（元）</th><th></th>
+          </tr></thead>
+          <tbody id="tx-body"></tbody>
+        </table>
+        <p class="note" id="tx-empty">本月还没有记录。</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>本月报表 · 支出排行</h2>
+      <div class="panel" id="report"></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="pw-dialog">
+  <h3 style="margin-top:0">修改密码</h3>
+  <input id="pw-old" type="password" placeholder="旧密码">
+  <input id="pw-new" type="password" placeholder="新密码（至少 6 位）">
+  <div class="msg" id="pw-msg"></div>
+  <div class="formrow">
+    <button id="pw-save">保存</button>
+    <button class="ghost" id="pw-close">关闭</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let token = localStorage.getItem("eb_token") || "";
+let month = new Date().toISOString().slice(0, 7);
+let categories = [], accounts = [], editingTx = null;
+
+function yuanToCents(s) {
+  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(s).trim());
+  if (!m) return null;
+  return parseInt(m[1], 10) * 100 + parseInt((m[2] || "0").padEnd(2, "0"), 10);
+}
+function fmt(cents) {
+  const neg = cents < 0, a = Math.abs(cents);
+  return (neg ? "-" : "") + Math.floor(a / 100) + "." + String(a % 100).padStart(2, "0");
+}
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token, ...(opts.headers || {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || ("请求失败 " + res.status));
+  return data;
+}
+
+async function doLogin() {
+  $("login-msg").textContent = "";
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: $("login-user").value, password: $("login-pass").value }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "登录失败");
+    token = data.token;
+    localStorage.setItem("eb_token", token);
+    enterApp(data.username, data.must_change_password);
+  } catch (e) { $("login-msg").textContent = e.message; }
+}
+
+async function enterApp(username, mustChange) {
+  $("login-wrap").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  $("who").textContent = "你好，" + username;
+  $("month-picker").value = month;
+  $("tx-date").value = new Date().toISOString().slice(0, 10);
+  if (mustChange) { alert("首次登录，请先修改默认密码"); $("pw-dialog").showModal(); }
+  await refreshAll();
+}
+
+async function refreshAll() {
+  categories = await api("/api/categories");
+  accounts = await api("/api/accounts");
+  renderAccounts();
+  renderTxFormOptions();
+  await Promise.all([renderBudgets(), renderTransactions(), renderReport()]);
+}
+
+function renderAccounts() {
+  const box = $("accounts");
+  if (!accounts.length) { box.innerHTML = '<p class="note">还没有账户，先加一个。</p>'; return; }
+  box.innerHTML = accounts.map(a =>
+    `<div class="formrow" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:5px 0">
+       <span><b>${esc(a.name)}</b> <span class="note">期初 ¥${fmt(a.opening_balance_cents)}</span></span>
+       <span>余额 <b>¥${fmt(a.balance_cents)}</b>
+         <button class="small danger" onclick="delAccount(${a.id})">删</button></span>
+     </div>`).join("");
+}
+
+function renderTxFormOptions() {
+  $("tx-account").innerHTML = accounts.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join("");
+  fillCategoryOptions();
+}
+function fillCategoryOptions() {
+  const kind = $("tx-kind").value;
+  const list = categories.filter(c => c.kind === kind);
+  $("tx-category").innerHTML = list.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+}
+
+async function renderBudgets() {
+  const data = await api("/api/budgets/" + month);
+  $("st-income").textContent = "¥" + fmt(data.summary.income_cents);
+  $("st-expense").textContent = "¥" + fmt(data.summary.expense_cents);
+  const tb = $("st-tobudget");
+  tb.textContent = "¥" + fmt(data.summary.to_budget_cents);
+  tb.style.color = data.summary.to_budget_cents < 0 ? "var(--bad)" : "";
+  $("st-balance").textContent = "¥" + fmt(accounts.reduce((s, a) => s + a.balance_cents, 0));
+  $("envelopes").innerHTML = data.categories.map(e => {
+    const total = e.carry_in_cents + e.budgeted_cents;
+    const pct = total > 0 ? Math.min(100, Math.round(e.spent_cents * 100 / total)) : (e.spent_cents > 0 ? 100 : 0);
+    return `<div class="envelope">
+      <h3>${esc(e.name)}
+        <button class="small danger" style="float:right" onclick="delCategory(${e.category_id})">删</button></h3>
+      <div class="balance ${e.balance_cents < 0 ? "neg" : ""}">¥${fmt(e.balance_cents)}</div>
+      <div class="row"><span>上月结转</span><span>¥${fmt(e.carry_in_cents)}</span></div>
+      <div class="row"><span>本月已花</span><span>¥${fmt(e.spent_cents)}</span></div>
+      <div class="bar"><i class="${e.balance_cents < 0 ? "over" : ""}" style="width:${pct}%"></i></div>
+      <div class="alloc">
+        <input id="alloc-${e.category_id}" value="${fmt(e.budgeted_cents)}" title="本月分配（元）">
+        <button class="small" onclick="saveBudget(${e.category_id})">保存分配</button>
+      </div>
+    </div>`;
+  }).join("") || '<p class="note">还没有支出类别。</p>';
+}
+
+async function renderTransactions() {
+  const txs = await api("/api/transactions?month=" + month);
+  const accName = id => (accounts.find(a => a.id === id) || {}).name || "?";
+  const catName = id => (categories.find(c => c.id === id) || {}).name || "?";
+  $("tx-empty").style.display = txs.length ? "none" : "";
+  $("tx-body").innerHTML = txs.map(t => `<tr>
+    <td>${t.date}</td><td>${esc(catName(t.category_id))}</td><td>${esc(accName(t.account_id))}</td>
+    <td>${esc(t.note || "")}</td>
+    <td class="num ${t.kind === "income" ? "amt-in" : "amt-out"}">${t.kind === "income" ? "+" : "−"}¥${fmt(t.amount_cents)}</td>
+    <td><button class="small ghost" onclick='editTx(${JSON.stringify(t)})'>改</button>
+        <button class="small danger" onclick="delTx(${t.id})">删</button></td></tr>`).join("");
+}
+
+async function renderReport() {
+  const r = await api("/api/reports/" + month);
+  const max = r.by_category.length ? r.by_category[0].amount_cents : 0;
+  $("report").innerHTML =
+    `<div class="formrow" style="gap:22px;margin-bottom:8px">
+       <span>总收入 <b class="amt-in">¥${fmt(r.income_cents)}</b></span>
+       <span>总支出 <b class="amt-out">¥${fmt(r.expense_cents)}</b></span>
+       <span>结余 <b>¥${fmt(r.net_cents)}</b></span>
+     </div>` +
+    (r.by_category.map(c => `<div class="rank">
+       <span class="nm">${esc(c.name)}</span>
+       <span class="track"><i style="width:${max ? Math.round(c.amount_cents * 100 / max) : 0}%"></i></span>
+       <span class="vl">¥${fmt(c.amount_cents)}</span></div>`).join("")
+     || '<p class="note">本月还没有支出。</p>');
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+// -------- actions --------
+window.saveBudget = async (catId) => {
+  const cents = yuanToCents($("alloc-" + catId).value);
+  if (cents === null) { alert("金额格式不对，例：500 或 500.50"); return; }
+  await api(`/api/budgets/${month}/${catId}`, { method: "PUT", body: JSON.stringify({ amount_cents: cents }) });
+  await renderBudgets();
+};
+window.delCategory = async (id) => {
+  if (!confirm("删除这个类别？（没被记账用过的才能删）")) return;
+  try { await api("/api/categories/" + id, { method: "DELETE" }); }
+  catch (e) { $("cat-msg").textContent = e.message; return; }
+  categories = await api("/api/categories"); renderTxFormOptions();
+  await renderBudgets(); await renderReport();
+};
+window.delAccount = async (id) => {
+  if (!confirm("删除账户会连同它的记账记录一起删除，确定？")) return;
+  await api("/api/accounts/" + id, { method: "DELETE" });
+  accounts = await api("/api/accounts"); renderAccounts(); renderTxFormOptions();
+  await Promise.all([renderBudgets(), renderTransactions(), renderReport()]);
+};
+window.delTx = async (id) => {
+  if (!confirm("删除这笔记录？")) return;
+  await api("/api/transactions/" + id, { method: "DELETE" });
+  accounts = await api("/api/accounts"); renderAccounts();
+  await Promise.all([renderBudgets(), renderTransactions(), renderReport()]);
+};
+window.editTx = (t) => {
+  editingTx = t.id;
+  $("tx-date").value = t.date; $("tx-kind").value = t.kind;
+  fillCategoryOptions();
+  $("tx-account").value = t.account_id; $("tx-category").value = t.category_id;
+  $("tx-amount").value = fmt(t.amount_cents); $("tx-note").value = t.note || "";
+  $("tx-add").textContent = "保存修改";
+  $("tx-cancel-edit").classList.remove("hidden");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+$("tx-kind").addEventListener("change", fillCategoryOptions);
+$("tx-add").addEventListener("click", async () => {
+  $("tx-msg").textContent = "";
+  const cents = yuanToCents($("tx-amount").value);
+  if (cents === null || cents <= 0) { $("tx-msg").textContent = "金额要大于 0，例：12.34"; return; }
+  if (!$("tx-account").value || !$("tx-category").value) { $("tx-msg").textContent = "先建好账户和类别"; return; }
+  const body = {
+    date: $("tx-date").value, kind: $("tx-kind").value,
+    account_id: parseInt($("tx-account").value, 10),
+    category_id: parseInt($("tx-category").value, 10),
+    amount_cents: cents, note: $("tx-note").value,
+  };
+  try {
+    if (editingTx) {
+      await api("/api/transactions/" + editingTx, { method: "PUT", body: JSON.stringify(body) });
+      editingTx = null; $("tx-add").textContent = "记上"; $("tx-cancel-edit").classList.add("hidden");
+    } else {
+      await api("/api/transactions", { method: "POST", body: JSON.stringify(body) });
+    }
+  } catch (e) { $("tx-msg").textContent = e.message; return; }
+  $("tx-amount").value = ""; $("tx-note").value = "";
+  accounts = await api("/api/accounts"); renderAccounts();
+  await Promise.all([renderBudgets(), renderTransactions(), renderReport()]);
+});
+$("tx-cancel-edit").addEventListener("click", () => {
+  editingTx = null; $("tx-add").textContent = "记上"; $("tx-cancel-edit").classList.add("hidden");
+  $("tx-amount").value = ""; $("tx-note").value = "";
+});
+$("acc-add").addEventListener("click", async () => {
+  $("acc-msg").textContent = "";
+  const opening = yuanToCents($("acc-opening").value || "0");
+  if (!$("acc-name").value.trim() || opening === null) { $("acc-msg").textContent = "账户名必填，期初余额格式如 1000.00"; return; }
+  try {
+    await api("/api/accounts", { method: "POST", body: JSON.stringify({ name: $("acc-name").value, opening_balance_cents: opening }) });
+  } catch (e) { $("acc-msg").textContent = e.message; return; }
+  $("acc-name").value = ""; $("acc-opening").value = "";
+  accounts = await api("/api/accounts"); renderAccounts(); renderTxFormOptions(); await renderBudgets();
+});
+async function addCategory(inputId, kind) {
+  $("cat-msg").textContent = "";
+  const name = $(inputId).value.trim();
+  if (!name) return;
+  try { await api("/api/categories", { method: "POST", body: JSON.stringify({ name, kind }) }); }
+  catch (e) { $("cat-msg").textContent = e.message; return; }
+  $(inputId).value = "";
+  categories = await api("/api/categories"); renderTxFormOptions(); await renderBudgets();
+}
+$("add-exp-cat").addEventListener("click", () => addCategory("new-exp-cat", "expense"));
+$("add-inc-cat").addEventListener("click", () => addCategory("new-inc-cat", "income"));
+$("month-picker").addEventListener("change", async () => {
+  month = $("month-picker").value || month;
+  await Promise.all([renderBudgets(), renderTransactions(), renderReport()]);
+});
+$("login-btn").addEventListener("click", doLogin);
+$("login-pass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+$("logout-btn").addEventListener("click", async () => {
+  try { await api("/api/logout", { method: "POST" }); } catch (e) {}
+  token = ""; localStorage.removeItem("eb_token"); location.reload();
+});
+$("pw-btn").addEventListener("click", () => { $("pw-msg").textContent = ""; $("pw-dialog").showModal(); });
+$("pw-close").addEventListener("click", () => $("pw-dialog").close());
+$("pw-save").addEventListener("click", async () => {
+  try {
+    await api("/api/change-password", { method: "POST",
+      body: JSON.stringify({ old_password: $("pw-old").value, new_password: $("pw-new").value }) });
+    $("pw-dialog").close(); alert("密码已修改");
+  } catch (e) { $("pw-msg").textContent = e.message; }
+});
+
+// boot
+(async () => {
+  if (!token) { $("login-wrap").classList.remove("hidden"); return; }
+  try {
+    const me = await api("/api/me");
+    enterApp(me.username, me.must_change_password);
+  } catch (e) {
+    token = ""; localStorage.removeItem("eb_token");
+    $("login-wrap").classList.remove("hidden");
+  }
+})();
+</script>
+</body>
+</html>
