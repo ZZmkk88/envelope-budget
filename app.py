@@ -13,6 +13,7 @@ import re
 import secrets
 import sqlite3
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -33,7 +34,19 @@ MAX_NOTE_LENGTH = 500
 DEFAULT_EXPENSE_CATEGORIES = ["餐饮", "交通", "购物", "居住", "娱乐", "医疗", "其他"]
 DEFAULT_INCOME_CATEGORIES = ["工资", "其他收入"]
 
-app = FastAPI(title="envelope-budget")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(
+    title="envelope-budget",
+    lifespan=_lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -166,14 +179,13 @@ def init_db() -> None:
                     " VALUES (?, ?, ?, 'income', ?)",
                     (user_id, name, name.lower(), now),
                 )
+        conn.execute(
+            "DELETE FROM sessions WHERE expires_at <= ?",
+            (time.time(),),
+        )
         conn.commit()
     finally:
         conn.close()
-
-
-@app.on_event("startup")
-def _startup() -> None:
-    init_db()
 
 
 # ---------------------------------------------------------------------------

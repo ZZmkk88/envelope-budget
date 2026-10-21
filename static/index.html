@@ -115,6 +115,7 @@
         <input id="new-inc-cat" placeholder="新增收入类别，如：奖金">
         <button class="small" id="add-inc-cat">加类别</button>
       </div>
+      <div id="income-cats" class="formrow"></div>
       <div class="msg" id="cat-msg"></div>
     </section>
 
@@ -188,7 +189,13 @@
 "use strict";
 const $ = id => document.getElementById(id);
 let token = localStorage.getItem("eb_token") || "";
-let month = new Date().toISOString().slice(0, 7);
+function localYmd(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return { month: y + "-" + m, day: y + "-" + m + "-" + day };
+}
+let month = localYmd(new Date()).month;
 let categories = [], accounts = [], editingTx = null;
 
 function yuanToCents(s) {
@@ -230,7 +237,7 @@ async function enterApp(username, mustChange) {
   $("app").classList.remove("hidden");
   $("who").textContent = "你好，" + username;
   $("month-picker").value = month;
-  $("tx-date").value = new Date().toISOString().slice(0, 10);
+  $("tx-date").value = localYmd(new Date()).day;
   if (mustChange) { alert("首次登录，请先修改默认密码"); $("pw-dialog").showModal(); }
   await refreshAll();
 }
@@ -264,7 +271,20 @@ function fillCategoryOptions() {
   $("tx-category").innerHTML = list.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
 }
 
+function renderIncomeCategories() {
+  const list = categories.filter(c => c.kind === "income");
+  const box = $("income-cats");
+  if (!list.length) {
+    box.innerHTML = '<span class="note">还没有收入类别。</span>';
+    return;
+  }
+  box.innerHTML = '<span class="note">收入类别</span>' + list.map(c =>
+    `<span>${esc(c.name)} <button class="small danger" onclick="delCategory(${c.id})">删</button></span>`
+  ).join("");
+}
+
 async function renderBudgets() {
+  renderIncomeCategories();
   const data = await api("/api/budgets/" + month);
   $("st-income").textContent = "¥" + fmt(data.summary.income_cents);
   $("st-expense").textContent = "¥" + fmt(data.summary.expense_cents);
@@ -283,6 +303,7 @@ async function renderBudgets() {
       <div class="row"><span>本月已花</span><span>¥${fmt(e.spent_cents)}</span></div>
       <div class="bar"><i class="${e.balance_cents < 0 ? "over" : ""}" style="width:${pct}%"></i></div>
       <div class="alloc">
+        <span class="note">本月分配</span>
         <input id="alloc-${e.category_id}" value="${fmt(e.budgeted_cents)}" title="本月分配（元）">
         <button class="small" onclick="saveBudget(${e.category_id})">保存分配</button>
       </div>
