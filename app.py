@@ -33,7 +33,8 @@ MAX_NOTE_LENGTH = 500
 DEFAULT_EXPENSE_CATEGORIES = ["餐饮", "交通", "购物", "居住", "娱乐", "医疗", "其他"]
 DEFAULT_INCOME_CATEGORIES = ["工资", "其他收入"]
 
-app = FastAPI(title="envelope-budget")
+# 口径第 6 条：交互式 API 文档不对外开放，登录也看不到（P2-10）
+app = FastAPI(title="envelope-budget", docs_url=None, redoc_url=None, openapi_url=None)
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +221,8 @@ def login(body: LoginIn):
             "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
             (token, user["id"], time.time() + TOKEN_TTL_SECONDS),
         )
+        # P2-9: 顺手清掉过期的会话行，避免 sessions 表无限膨胀
+        conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (time.time(),))
         conn.commit()
         return {
             "token": token,
@@ -243,17 +246,24 @@ def logout(request: Request, user: sqlite3.Row = Depends(current_user)):
 
 
 @app.post("/api/change-password")
-def change_password(body: ChangePasswordIn, user: sqlite3.Row = Depends(current_user)):
+def change_password(body: ChangePasswordIn, request: Request, user: sqlite3.Row = Depends(current_user)):
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="新密码至少 6 位")
     if hash_password(body.old_password, user["salt"]) != user["password_hash"]:
         raise HTTPException(status_code=400, detail="旧密码不正确")
+    token = request.headers.get("Authorization", "")[len("Bearer "):].strip()
     salt = secrets.token_hex(16)
     conn = get_db()
     try:
         conn.execute(
             "UPDATE users SET password_hash = ?, salt = ?, must_change_password = 0 WHERE id = ?",
             (hash_password(body.new_password, salt), salt, user["id"]),
+        )
+        # The token that just changed the password stays valid. Every other
+        # session for this user was issued under the old password.
+        conn.execute(
+            "DELETE FROM sessions WHERE user_id = ? AND token != ?",
+            (user["id"], token),
         )
         conn.commit()
         return {"ok": True}
@@ -736,4 +746,6 @@ def index():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
+    # 口径第 3 条：默认只绑本机；局域网访问通过环境变量显式放开（放开前务必先改默认密码）
+    uvicorn.run(app, host=os.environ.get("ENVELOPE_HOST", "127.0.0.1"),
+                port=int(os.environ.get("PORT", "8000")))

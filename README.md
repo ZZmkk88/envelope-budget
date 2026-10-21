@@ -45,6 +45,7 @@ python -m venv .venv
 | 变量 | 说明 | 默认 |
 |---|---|---|
 | `PORT` | 监听端口（Windows PowerShell 里用 `$env:PORT=8123` 设置） | 8000 |
+| `ENVELOPE_HOST` | 监听地址。默认只绑本机 `127.0.0.1`；局域网访问可设为 `0.0.0.0`，**放开前务必先改掉默认密码** | 127.0.0.1 |
 | `EB_DB_PATH` | SQLite 数据库文件位置 | `data/budget.db` |
 | `EB_INITIAL_USERNAME` / `EB_INITIAL_PASSWORD` | 首次启动时创建的管理员账号（仅在数据库为空时生效） | admin / admin123 |
 

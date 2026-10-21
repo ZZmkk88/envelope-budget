@@ -188,7 +188,12 @@
 "use strict";
 const $ = id => document.getElementById(id);
 let token = localStorage.getItem("eb_token") || "";
-let month = new Date().toISOString().slice(0, 7);
+// P2-8: toISOString() 是 UTC，东八区凌晨会偏到前一天/前一月，用本地时区拼串
+function localDateStr() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+let month = localDateStr().slice(0, 7);
 let categories = [], accounts = [], editingTx = null;
 
 function yuanToCents(s) {
@@ -230,7 +235,7 @@ async function enterApp(username, mustChange) {
   $("app").classList.remove("hidden");
   $("who").textContent = "你好，" + username;
   $("month-picker").value = month;
-  $("tx-date").value = new Date().toISOString().slice(0, 10);
+  $("tx-date").value = localDateStr();
   if (mustChange) { alert("首次登录，请先修改默认密码"); $("pw-dialog").showModal(); }
   await refreshAll();
 }
@@ -299,7 +304,7 @@ async function renderTransactions() {
     <td>${t.date}</td><td>${esc(catName(t.category_id))}</td><td>${esc(accName(t.account_id))}</td>
     <td>${esc(t.note || "")}</td>
     <td class="num ${t.kind === "income" ? "amt-in" : "amt-out"}">${t.kind === "income" ? "+" : "−"}¥${fmt(t.amount_cents)}</td>
-    <td><button class="small ghost" onclick='editTx(${JSON.stringify(t)})'>改</button>
+    <td><button class="small ghost" data-tx="${esc(JSON.stringify(t))}" onclick="editTx(JSON.parse(this.dataset.tx))">改</button>
         <button class="small danger" onclick="delTx(${t.id})">删</button></td></tr>`).join("");
 }
 
