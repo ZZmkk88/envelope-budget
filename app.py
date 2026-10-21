@@ -13,6 +13,7 @@ import re
 import secrets
 import sqlite3
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -33,8 +34,16 @@ MAX_NOTE_LENGTH = 500
 DEFAULT_EXPENSE_CATEGORIES = ["餐饮", "交通", "购物", "居住", "娱乐", "医疗", "其他"]
 DEFAULT_INCOME_CATEGORIES = ["工资", "其他收入"]
 
+# P2-1（TASK-047）：弃用的 @app.on_event("startup") 改为 lifespan，启动仍只做 init_db()
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    init_db()
+    yield
+
+
 # 口径第 6 条：交互式 API 文档不对外开放，登录也看不到（P2-10）
-app = FastAPI(title="envelope-budget", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title="envelope-budget", lifespan=_lifespan,
+              docs_url=None, redoc_url=None, openapi_url=None)
 
 
 # ---------------------------------------------------------------------------
@@ -170,11 +179,6 @@ def init_db() -> None:
         conn.commit()
     finally:
         conn.close()
-
-
-@app.on_event("startup")
-def _startup() -> None:
-    init_db()
 
 
 # ---------------------------------------------------------------------------
