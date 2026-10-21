@@ -299,7 +299,7 @@ async function renderTransactions() {
     <td>${t.date}</td><td>${esc(catName(t.category_id))}</td><td>${esc(accName(t.account_id))}</td>
     <td>${esc(t.note || "")}</td>
     <td class="num ${t.kind === "income" ? "amt-in" : "amt-out"}">${t.kind === "income" ? "+" : "−"}¥${fmt(t.amount_cents)}</td>
-    <td><button class="small ghost" onclick='editTx(${JSON.stringify(t)})'>改</button>
+    <td><button class="small ghost" data-tx="${esc(JSON.stringify(t))}" onclick="editTx(JSON.parse(this.dataset.tx))">改</button>
         <button class="small danger" onclick="delTx(${t.id})">删</button></td></tr>`).join("");
 }
 
